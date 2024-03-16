@@ -57,7 +57,11 @@ def create_graph_from_edges(unnamed_edges, free_nodes, matched_edges):
     for root in free_nodes:
 
         subgraph = nx.ego_graph(reference_graph, root, radius=len(reference_graph.nodes))
-        nodes = sorted(list(subgraph.nodes))
+        nodes = list(subgraph.nodes)
+
+        # move the root to the front so it's drawn first
+        nodes.remove(root)
+        nodes.insert(0, root)
 
         edges = list(subgraph.edges)
 
@@ -159,6 +163,7 @@ class BipartiteGraphAnimation(Scene):
             bfs_graphs.scale(scale)
             bfs_graphs.next_to(G, RIGHT, buff=spacing)
 
+            # unscale the stroke width
             for gr in bfs_graphs:
                 for _, e in gr.edges.items():
                     scaled_stroke = e.get_stroke_width() * scale
@@ -172,7 +177,6 @@ class BipartiteGraphAnimation(Scene):
                 if circle:
                     self.play(
                         Create(gr),
-                        # circle.animate.move_to(root.get_center()),
                         circle.animate.surround(root),
                     )
                     self.play(Indicate(root), FadeTransform(circle, root))
@@ -182,9 +186,17 @@ class BipartiteGraphAnimation(Scene):
             if type(edge_remove) == tuple:
                 u = get_node_name(edge_remove[0], True)
                 v = get_node_name(edge_remove[1], False)
-                self.play(G.edges[(u, v)].animate.set_color(RED), run_time=0.5)
+                edges_to_remove = [G.edges[(u, v)]]
+
+                for gr in bfs_graphs:
+                    if (u, v) in gr.edges:
+                        edges_to_remove.append(gr.edges[(u, v)])
+                    if (v, u) in gr.edges:
+                        edges_to_remove.append(gr.edges[(v, u)])
+
+                self.play(*[e.animate.set_color(RED) for e in edges_to_remove], run_time=0.5)
                 self.wait(1)
-                self.play(G.edges[(u, v)].animate.set_color(GRAY), run_time=0.5)
+                self.play(*[e.animate.set_color(GRAY) for e in edges_to_remove], run_time=0.5)
 
             self.next_section("Matching Edges")
 
@@ -198,7 +210,13 @@ class BipartiteGraphAnimation(Scene):
                 u = get_node_name(match[0], True)
                 v = get_node_name(match[1], False)
                 edge = (u, v)
-                self.play(G.edges[edge].animate.set_color(GREEN))
+                edges_to_match = [G.edges[edge]]
+                for gr in bfs_graphs:
+                    if edge in gr.edges:
+                        edges_to_match.append(gr.edges[edge])
+                    if (v, u) in gr.edges:
+                        edges_to_match.append(gr.edges[(v, u)])
+                self.play(*[e.animate.set_color(GREEN) for e in edges_to_match], run_time=0.5)
                 all_u = [g.vertices[u] for g in bfs_graphs if u in g.vertices.keys()]
                 all_v = [g.vertices[v] for g in bfs_graphs if v in g.vertices.keys()]
                 # remove any edge containing u or v
