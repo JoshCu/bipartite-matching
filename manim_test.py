@@ -70,7 +70,7 @@ def create_graph_from_edges(unnamed_edges):
         graph = Graph(
             unique_nodes,
             node_edges,
-            layout="partite",
+            layout="tree",
             partitions=partitions,
             vertex_config=node_config,
             root_vertex=u_node,
@@ -102,7 +102,8 @@ class BipartiteGraphAnimation(Scene):
         self.play(*[e.animate.set_color(GRAY) for _, e in G.edges.items()])
         whole_graph_width = G.get_width() + spacing * 2
         available_width = 14 - whole_graph_width
-        self.next_section()
+
+        self.next_section("BFS Graphs")
         while True:
             bfs_edges = eval(anim_steps.pop(0).split(":")[1])
             matched_nodes = eval(anim_steps.pop(0).split(":")[1])
@@ -116,23 +117,26 @@ class BipartiteGraphAnimation(Scene):
                 self.play(G.edges[(u, v)].animate.set_color(RED), run_time=0.5)
                 self.wait(1)
                 self.play(G.edges[(u, v)].animate.set_color(GRAY), run_time=0.5)
+
             free_n_highlight = {}
+            indicate_free_nodes = []
 
             for u in free_nodes:
                 u = get_node_name(u, True)
                 # draw a circle around the node
-                circle = Circle(radius=0.5, color=YELLOW, stroke_width=5)
-                circle.move_to(G.vertices[u].get_center())
-                self.play(Indicate(G.vertices[u]))
+                circle = Circle(color=YELLOW, stroke_width=5)
+                circle.surround(G.vertices[u])
+                indicate_free_nodes.append(Indicate(G.vertices[u]))
                 # save the circle for later removal
                 free_n_highlight[u] = circle
 
-            self.play(*[Create(circle) for circle in free_n_highlight.values()])
-
+            self.play(
+                *[Create(circle) for circle in free_n_highlight.values()], *indicate_free_nodes
+            )
+            self.next_section("Adding BFS Trees")
             self.wait(1)
             bfs_graphs = create_graph_from_edges(bfs_edges)
             # arrange and scale to fit on screen
-            bfs_graphs.rotate(-PI / 2)
             bfs_graphs.arrange_in_grid(buff=0.3)
             # get the scale factor to fit the available width
             width_scale = (available_width - (2 * spacing)) / bfs_graphs.get_width()
@@ -143,15 +147,68 @@ class BipartiteGraphAnimation(Scene):
             bfs_graphs.scale(scale)
             bfs_graphs.next_to(G, RIGHT, buff=spacing)
 
+            for gr in bfs_graphs:
+                for _, e in gr.edges.items():
+                    scaled_stroke = e.get_stroke_width() * scale
+                    e.set_stroke_width(scaled_stroke)
+
             # thankfully VGroup preserves order
             for i, gr in enumerate(bfs_graphs):
                 root_key = get_node_name(free_nodes[i], True)
                 root = gr.vertices[root_key]
                 circle = free_n_highlight.get(root_key, None)
                 if circle:
-                    self.play(Create(gr), circle.animate.move_to(root.get_center()))
-                    self.play(FadeOut(circle), circle.animate.scale(0.1), Indicate(root))
+                    self.play(
+                        Create(gr),
+                        # circle.animate.move_to(root.get_center()),
+                        circle.animate.surround(root),
+                    )
+                    self.play(Indicate(root), FadeTransform(circle, root))
             self.wait(1)
+
+            self.next_section("Matching Edges")
+
+            # pop lines beginning with "add match" until we reach the next section
+            matches = []
+            while anim_steps[0].startswith("add match"):
+                # space separated list of tuples
+                matches.append(eval(anim_steps.pop(0).split(":")[1]))
+
+            for match in matches:
+                u = get_node_name(match[0], True)
+                v = get_node_name(match[1], False)
+                edge = (u, v)
+                self.play(G.edges[edge].animate.set_color(GREEN))
+                all_u = [g.vertices[u] for g in bfs_graphs if u in g.vertices.keys()]
+                all_v = [g.vertices[v] for g in bfs_graphs if v in g.vertices.keys()]
+                # remove any edge containing u or v
+                all_edges = []
+                for g in bfs_graphs:
+                    for e in g.edges:
+                        if u in e or v in e:
+                            all_edges.append(g.edges[e])
+                objects_to_remove = all_edges + all_u + all_v
+                self.play(
+                    *[Indicate(n) for n in all_v + all_u],
+                    Indicate(G.vertices[u]),
+                    Indicate(G.vertices[v]),
+                    run_time=3,
+                )
+
+                # remove the vertices from the actual graphs
+                for g in bfs_graphs:
+                    if u in g.vertices.keys():
+                        g.remove_vertices(u)
+                    if v in g.vertices.keys():
+                        g.remove_vertices(v)
+                    if len(g.vertices) == 1:
+                        objects_to_remove.append(g)
+                        bfs_graphs.remove(g)
+
+                self.play(*[FadeOut(o) for o in objects_to_remove])
+                # remove the objects from the scene
+                self.remove(*objects_to_remove)
+                self.wait(1)
 
             break
 

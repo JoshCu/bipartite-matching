@@ -83,7 +83,7 @@ class BipGraph(object):
             if self.distance_to_dummy[self.v_to_u_map[v]] == self.distance_to_dummy[u] + 1:
                 # recursively search deeper for an augmenting path
                 if self.dfs(self.v_to_u_map[v]):
-                    print(f"add match: {repr(u)} {repr(v)}")
+                    print(f"add match: {repr((u,v))}")
                     self.v_to_u_map[v] = u
                     self.u_to_v_map[u] = v
                     return True
