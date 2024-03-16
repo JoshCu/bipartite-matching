@@ -5,11 +5,11 @@ from collections import defaultdict
 
 import networkx as nx
 
-graph_name = "size3.graph"
+graph_name = "size4.graph"
 anim_step_file = graph_name + ".anim"
 
 EDGE_CONFIG = {"stroke_width": 6}
-NODE_RADIUS = 0.2
+NODE_RADIUS = 0.3
 
 
 def get_node_name(node, is_left):
@@ -37,6 +37,7 @@ def create_graph_from_adj_matrix(adj_matrix):
     graph = Graph(
         nodes,
         edges,
+        labels=True,
         layout="partite",
         partitions=partitions,
         vertex_config=node_config,
@@ -86,6 +87,7 @@ def create_graph_from_edges(unnamed_edges, free_nodes, matched_edges):
         graph = Graph(
             nodes,
             edges,
+            labels=True,
             layout="partite",
             partitions=partitions,
             vertex_config=node_config,
@@ -217,6 +219,7 @@ class BipartiteGraphAnimation(Scene):
                     if (v, u) in gr.edges:
                         edges_to_match.append(gr.edges[(v, u)])
                 self.play(*[e.animate.set_color(GREEN) for e in edges_to_match], run_time=0.5)
+                self.play(*[Indicate(e) for e in edges_to_match], run_time=0.5)
                 all_u = [g.vertices[u] for g in bfs_graphs if u in g.vertices.keys()]
                 all_v = [g.vertices[v] for g in bfs_graphs if v in g.vertices.keys()]
                 # remove any edge containing u or v
@@ -227,9 +230,9 @@ class BipartiteGraphAnimation(Scene):
                             all_edges.append(g.edges[e])
                 objects_to_remove = all_edges + all_u + all_v
                 self.play(
-                    *[Indicate(n) for n in all_v + all_u],
-                    Indicate(G.vertices[u]),
-                    Indicate(G.vertices[v]),
+                    *[Circumscribe(n, Circle) for n in all_v + all_u],
+                    Circumscribe(G.vertices[u], Circle),
+                    Circumscribe(G.vertices[v], Circle),
                     run_time=3,
                 )
 

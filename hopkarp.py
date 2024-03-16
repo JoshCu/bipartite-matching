@@ -116,6 +116,6 @@ class BipGraph(object):
 
 
 if __name__ == "__main__":
-    adj_matrix = load_file("size3.graph")
+    adj_matrix = load_file("size4.graph")
     g = BipGraph(adj_matrix)
     print("Size of maximum matching is %d" % g.find_matches_hopcroft_karp())
