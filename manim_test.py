@@ -46,10 +46,10 @@ def create_graph_from_adj_matrix(adj_matrix):
     return graph
 
 
-def create_graph_from_edges(unnamed_edges, free_nodes, match_edges):
+def create_graph_from_edges(unnamed_edges, free_nodes, matched_edges):
     free_nodes = [get_node_name(node, True) for node in free_nodes]
     edges = [(get_node_name(u, True), get_node_name(v, False)) for u, v in unnamed_edges]
-    matched_edges = [(get_node_name(v, False), get_node_name(u, True)) for u, v in match_edges]
+    matched_edges = [(get_node_name(v, False), get_node_name(u, True)) for u, v in matched_edges]
     graphs = VGroup()
     edges += matched_edges
     # for each free node, create a graph
@@ -57,23 +57,41 @@ def create_graph_from_edges(unnamed_edges, free_nodes, match_edges):
     for root in free_nodes:
 
         subgraph = nx.ego_graph(reference_graph, root, radius=len(reference_graph.nodes))
-        nodes = list(subgraph.nodes)
+        nodes = sorted(list(subgraph.nodes))
+
         edges = list(subgraph.edges)
-        print(f"root: {root}, nodes: {nodes}, edges: {edges}")
+
+        # partition by distance from root because "tree" layout breaks on loops
+        distances = nx.shortest_path_length(subgraph, root)
+        # convert d[node] = distance to [[nodes_dist1][nodes_dist2]...]
+        partitions = [[root]]
+        for node, dist in distances.items():
+            if dist == 0:
+                continue
+            while len(partitions) <= dist:
+                partitions.append([])
+            partitions[dist].append(node)
+
         node_config = {}
         for node in nodes:
             if node.startswith("u"):
                 node_config[node] = {"fill_color": GREEN, "radius": NODE_RADIUS}
             else:
                 node_config[node] = {"fill_color": BLUE, "radius": NODE_RADIUS}
+
         graph = Graph(
             nodes,
             edges,
-            # layout="tree",
+            layout="partite",
+            partitions=partitions,
             vertex_config=node_config,
             root_vertex=root,
             edge_config=EDGE_CONFIG,
         )
+        # incredibly it's easier to do this after than messing with the config dict
+        for edge in graph.edges:
+            if edge in matched_edges:
+                graph.edges[edge].set_color(GREEN)
         graphs.add(graph)
     return graphs
 
@@ -81,7 +99,7 @@ def create_graph_from_edges(unnamed_edges, free_nodes, match_edges):
 class BipartiteGraphAnimation(Scene):
     def construct(self):
         # default manim grid is 14*8
-        wait_time = 0.1
+        wait_time = 1
         spacing = 1
 
         adj_matrix = load_file(graph_name)
@@ -103,7 +121,6 @@ class BipartiteGraphAnimation(Scene):
 
         self.next_section("BFS Graphs")
         while True:
-            print(anim_steps)
             bfs_edges = eval(anim_steps.pop(0).split(":")[1])
             matched_nodes = eval(anim_steps.pop(0).split(":")[1])
             edge_remove = eval(anim_steps.pop(0).split(":")[1])
@@ -214,6 +231,9 @@ class BipartiteGraphAnimation(Scene):
                 self.wait(1)
 
             if not anim_steps[0].startswith("bfs_edges"):
+                if bfs_graphs:
+                    self.play(*[FadeOut(g) for g in bfs_graphs])
+                    self.remove(*bfs_graphs)
                 break
 
         # add the bfs graph
