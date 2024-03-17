@@ -1,15 +1,15 @@
 from manim import *
-from copy import copy
 from utils import load_file, matrix_to_edge_pairs
-from collections import defaultdict
 
 import networkx as nx
 
 graph_name = "size4.graph"
 anim_step_file = graph_name + ".anim"
 
-EDGE_CONFIG = {"stroke_width": 6}
 NODE_RADIUS = 0.3
+MATCHED_COLOR = GREEN
+SCR_HEIGHT = 8
+SCR_WIDTH = 14
 
 
 def get_node_name(node, is_left):
@@ -19,70 +19,87 @@ def get_node_name(node, is_left):
         return f"v_{node}"
 
 
-def create_graph_from_adj_matrix(adj_matrix):
-    u_nodes = range(len(adj_matrix))
-    v_nodes = range(len(adj_matrix[0]))
-    u_nodes = [get_node_name(node, True) for node in u_nodes]
-    v_nodes = [get_node_name(node, False) for node in v_nodes]
-    nodes = u_nodes + v_nodes
-    partitions = [u_nodes, v_nodes]
-    # colour u and v nodes differently
+def get_node_config(nodes):
     node_config = {}
-    for node in u_nodes:
-        node_config[node] = {"fill_color": GREEN, "radius": NODE_RADIUS}
-    for node in v_nodes:
-        node_config[node] = {"fill_color": BLUE, "radius": NODE_RADIUS}
+    for node in nodes:
+        if node.startswith("u"):
+            node_config[node] = {"fill_color": GREEN, "radius": NODE_RADIUS}
+        else:
+            node_config[node] = {"fill_color": BLUE, "radius": NODE_RADIUS}
+    return node_config
+
+
+def get_edge_config(edges):
+    edge_config = {}
+    for edge in edges:
+        edge_config[edge] = {"stroke_width": 6}
+    return edge_config
+
+
+def get_node_partitions(graph, root_node):
+    """
+    Gets the partitions of the nodes, using distance from root as the partition
+    """
+    distances = nx.shortest_path_length(graph, root_node)
+    # convert d[node] = distance to [[nodes_dist1][nodes_dist2]...]
+    partitions = [[root_node]]
+    for node, dist in distances.items():
+        if dist == 0:
+            continue
+        while len(partitions) <= dist:
+            partitions.append([])
+        partitions[dist].append(node)
+    return partitions
+
+
+def create_graph_from_adj_matrix(adj_matrix):
+    # get lists of u_0 to u_n and v_0 to v_n
+    u_nodes = [get_node_name(node, True) for node in range(len(adj_matrix))]
+    v_nodes = [get_node_name(node, False) for node in range(len(adj_matrix[0]))]
+    nodes = u_nodes + v_nodes
+    # get the adjacency list and rename the nodes from indices to u_0 to u_n and v_0 to v_n
     edges = matrix_to_edge_pairs(adj_matrix)
     edges = [(u_nodes[i], v_nodes[j]) for i, j in edges]
-    graph = Graph(
+    # set the partitions used for the layout
+    partitions = [u_nodes, v_nodes]
+
+    return Graph(
         nodes,
         edges,
         labels=True,
         layout="partite",
         partitions=partitions,
-        vertex_config=node_config,
-        # layout_scale=1,
-        edge_config=EDGE_CONFIG,
+        vertex_config=get_node_config(nodes),
+        edge_config=get_edge_config(edges),
     )
-    return graph
 
 
-def create_graph_from_edges(unnamed_edges, free_nodes, matched_edges):
+def create_bfs_graphs(unnamed_edges, free_nodes, matched_edges):
     free_nodes = [get_node_name(node, True) for node in free_nodes]
     edges = [(get_node_name(u, True), get_node_name(v, False)) for u, v in unnamed_edges]
+    # reverse the matched edges for making a digraph
+    # this ensures alternating match unmatched paths
     matched_edges = [(get_node_name(v, False), get_node_name(u, True)) for u, v in matched_edges]
     graphs = VGroup()
     edges += matched_edges
-    # for each free node, create a graph
+
     reference_graph = nx.DiGraph(edges)
     for root in free_nodes:
-
+        # get the subgraph of the reference graph with the root as the center
         subgraph = nx.ego_graph(reference_graph, root, radius=len(reference_graph.nodes))
+        # reorder the nodes so the root is first
         nodes = list(subgraph.nodes)
-
-        # move the root to the front so it's drawn first
         nodes.remove(root)
         nodes.insert(0, root)
 
         edges = list(subgraph.edges)
-
-        # partition by distance from root because "tree" layout breaks on loops
-        distances = nx.shortest_path_length(subgraph, root)
-        # convert d[node] = distance to [[nodes_dist1][nodes_dist2]...]
-        partitions = [[root]]
-        for node, dist in distances.items():
-            if dist == 0:
-                continue
-            while len(partitions) <= dist:
-                partitions.append([])
-            partitions[dist].append(node)
-
-        node_config = {}
-        for node in nodes:
-            if node.startswith("u"):
-                node_config[node] = {"fill_color": GREEN, "radius": NODE_RADIUS}
-            else:
-                node_config[node] = {"fill_color": BLUE, "radius": NODE_RADIUS}
+        # partitions for animation layout
+        partitions = get_node_partitions(subgraph, root)
+        # get the edge config and set the matched edges to green
+        edge_config = get_edge_config(edges)
+        for e in edges:
+            if e in matched_edges:
+                edge_config[e]["stroke_color"] = MATCHED_COLOR
 
         graph = Graph(
             nodes,
@@ -90,50 +107,54 @@ def create_graph_from_edges(unnamed_edges, free_nodes, matched_edges):
             labels=True,
             layout="partite",
             partitions=partitions,
-            vertex_config=node_config,
+            vertex_config=get_node_config(nodes),
             root_vertex=root,
-            edge_config=EDGE_CONFIG,
+            edge_config=edge_config,
         )
-        # incredibly it's easier to do this after than messing with the config dict
-        for edge in graph.edges:
-            if edge in matched_edges:
-                graph.edges[edge].set_color(GREEN)
         graphs.add(graph)
+
     return graphs
+
+
+def get_step_inputs(anim_steps):
+    bfs_edges = eval(anim_steps.pop(0).split(":")[1])
+    matched_nodes = eval(anim_steps.pop(0).split(":")[1])
+    edge_remove = eval(anim_steps.pop(0).split(":")[1])
+    free_nodes = eval(anim_steps.pop(0).split(":")[1])
+
+    # remove matched edges from bfs_edges
+    bfs_edges = [edge for edge in bfs_edges if edge not in matched_nodes]
+
+    return bfs_edges, matched_nodes, edge_remove, free_nodes
 
 
 class BipartiteGraphAnimation(Scene):
     def construct(self):
         # default manim grid is 14*8
-        wait_time = 1
         spacing = 1
 
-        adj_matrix = load_file(graph_name)
-        G = create_graph_from_adj_matrix(adj_matrix)
-
+        G = create_graph_from_adj_matrix(load_file(graph_name))
         with open(anim_step_file, "r") as f:
             anim_steps = f.readlines()
 
         # scale graph to fit available height
-        self.play(Create(G), run_time=wait_time)
-        self.wait(wait_time)
+        height_scale = (SCR_HEIGHT - spacing) / G.get_height()
+        G.scale(height_scale)
+        self.play(Create(G))
+        self.wait()
         self.play(G.animate.to_edge(LEFT, buff=spacing))
-        self.wait(wait_time)
+        self.wait()
 
         # set all edges to grey
         self.play(*[e.animate.set_color(GRAY) for _, e in G.edges.items()])
+
+        # calculate the width of the graph and the available width for the bfs graphs
         whole_graph_width = G.get_width() + spacing * 2
-        available_width = 14 - whole_graph_width
+        available_width = SCR_WIDTH - whole_graph_width
 
         self.next_section("BFS Graphs")
         while True:
-            bfs_edges = eval(anim_steps.pop(0).split(":")[1])
-            matched_nodes = eval(anim_steps.pop(0).split(":")[1])
-            edge_remove = eval(anim_steps.pop(0).split(":")[1])
-            free_nodes = eval(anim_steps.pop(0).split(":")[1])
-
-            # remove matched nodes from bfs_edges
-            bfs_edges = [edge for edge in bfs_edges if edge not in matched_nodes]
+            bfs_edges, matched_nodes, edge_remove, free_nodes = get_step_inputs(anim_steps)
 
             free_n_highlight = {}
             indicate_free_nodes = []
@@ -153,13 +174,13 @@ class BipartiteGraphAnimation(Scene):
 
             self.next_section("Adding BFS Trees")
             self.wait(1)
-            bfs_graphs = create_graph_from_edges(bfs_edges, free_nodes, matched_nodes)
+            bfs_graphs = create_bfs_graphs(bfs_edges, free_nodes, matched_nodes)
             # arrange and scale to fit on screen
             bfs_graphs.arrange_in_grid(buff=0.3)
             # get the scale factor to fit the available width
             width_scale = (available_width - (2 * spacing)) / bfs_graphs.get_width()
             # get the scale factor to fit the available height
-            height_scale = (8 - (2 * spacing)) / bfs_graphs.get_height()
+            height_scale = (SCR_HEIGHT - (2 * spacing)) / bfs_graphs.get_height()
             # use the smaller scale factor
             scale = min(width_scale, height_scale)
             bfs_graphs.scale(scale)
