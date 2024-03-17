@@ -74,12 +74,9 @@ def create_graph_from_adj_matrix(adj_matrix):
     )
 
 
-def create_bfs_graphs(unnamed_edges, free_nodes, matched_edges):
-    free_nodes = [get_node_name(node, True) for node in free_nodes]
-    edges = [(get_node_name(u, True), get_node_name(v, False)) for u, v in unnamed_edges]
-    # reverse the matched edges for making a digraph
-    # this ensures alternating match unmatched paths
-    matched_edges = [(get_node_name(v, False), get_node_name(u, True)) for u, v in matched_edges]
+def create_bfs_graphs(edges, free_nodes, matched_edges):
+    # reverse the matched edges for the digraph, ensuring alternatig match unmatched paths
+    matched_edges = [(v, u) for u, v in matched_edges]
     graphs = VGroup()
     edges += matched_edges
 
@@ -122,6 +119,13 @@ def get_step_inputs(anim_steps):
     edge_remove = eval(anim_steps.pop(0).split(":")[1])
     free_nodes = eval(anim_steps.pop(0).split(":")[1])
 
+    # rename all the nodes to u_i and v_i
+    bfs_edges = [(get_node_name(u, True), get_node_name(v, False)) for u, v in bfs_edges]
+    matched_nodes = [(get_node_name(u, True), get_node_name(v, False)) for u, v in matched_nodes]
+    free_nodes = [get_node_name(node, True) for node in free_nodes]
+    if type(edge_remove) == tuple:
+        edge_remove = (get_node_name(edge_remove[0], True), get_node_name(edge_remove[1], False))
+
     # remove matched edges from bfs_edges
     bfs_edges = [edge for edge in bfs_edges if edge not in matched_nodes]
 
@@ -160,7 +164,6 @@ class BipartiteGraphAnimation(Scene):
             indicate_free_nodes = []
 
             for u in free_nodes:
-                u = get_node_name(u, True)
                 # draw a circle around the node
                 circle = Circle(color=YELLOW, stroke_width=5)
                 circle.surround(G.vertices[u])
@@ -194,7 +197,7 @@ class BipartiteGraphAnimation(Scene):
 
             # thankfully VGroup preserves order
             for i, gr in enumerate(bfs_graphs):
-                root_key = get_node_name(free_nodes[i], True)
+                root_key = free_nodes[i]
                 root = gr.vertices[root_key]
                 circle = free_n_highlight.get(root_key, None)
                 if circle:
@@ -207,8 +210,8 @@ class BipartiteGraphAnimation(Scene):
 
             # set the edge to be removed to red then back to grey
             if type(edge_remove) == tuple:
-                u = get_node_name(edge_remove[0], True)
-                v = get_node_name(edge_remove[1], False)
+                u = edge_remove[0]
+                v = edge_remove[1]
                 edges_to_remove = [G.edges[(u, v)]]
 
                 for gr in bfs_graphs:
