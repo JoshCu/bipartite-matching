@@ -7,7 +7,11 @@ graph_name = "size4.graph"
 anim_step_file = graph_name + ".anim"
 
 NODE_RADIUS = 0.3
-MATCHED_COLOR = GREEN
+MATCHED_COLOR = PURE_GREEN
+UNMATCHED_COLOR = GRAY_D
+DELETING_COLOR = RED
+U_COLOR = GREEN
+V_COLOR = BLUE
 SCR_HEIGHT = 8
 SCR_WIDTH = 14
 
@@ -23,9 +27,9 @@ def get_node_config(nodes):
     node_config = {}
     for node in nodes:
         if node.startswith("u"):
-            node_config[node] = {"fill_color": GREEN, "radius": NODE_RADIUS}
+            node_config[node] = {"fill_color": U_COLOR}  # , "radius": NODE_RADIUS}
         else:
-            node_config[node] = {"fill_color": BLUE, "radius": NODE_RADIUS}
+            node_config[node] = {"fill_color": V_COLOR}  # , "radius": NODE_RADIUS}
     return node_config
 
 
@@ -132,17 +136,33 @@ def get_step_inputs(anim_steps):
     return bfs_edges, matched_nodes, edge_remove, free_nodes
 
 
+def get_edges_from_bfs_graphs(bfs_graphs, edge, require_both=True):
+    u, v = edge
+    edges = []
+    for g in bfs_graphs:
+        if require_both:
+            if (u, v) in g.edges:
+                edges.append(g.edges[(u, v)])
+            if (v, u) in g.edges:
+                edges.append(g.edges[(v, u)])
+        else:
+            for e in g.edges:
+                if u in e or v in e:
+                    edges.append(g.edges[e])
+    return edges
+
+
 class BipartiteGraphAnimation(Scene):
     def construct(self):
         # default manim grid is 14*8
-        spacing = 1
+        spacing = 0.5
 
         G = create_graph_from_adj_matrix(load_file(graph_name))
         with open(anim_step_file, "r") as f:
             anim_steps = f.readlines()
 
         # scale graph to fit available height
-        height_scale = (SCR_HEIGHT - spacing) / G.get_height()
+        height_scale = (SCR_HEIGHT - (2 * spacing)) / G.get_height()
         G.scale(height_scale)
         self.play(Create(G))
         self.wait()
@@ -150,7 +170,7 @@ class BipartiteGraphAnimation(Scene):
         self.wait()
 
         # set all edges to grey
-        self.play(*[e.animate.set_color(GRAY) for _, e in G.edges.items()])
+        self.play(*[e.animate.set_color(UNMATCHED_COLOR) for _, e in G.edges.items()])
 
         # calculate the width of the graph and the available width for the bfs graphs
         whole_graph_width = G.get_width() + spacing * 2
@@ -176,10 +196,10 @@ class BipartiteGraphAnimation(Scene):
             )
 
             self.next_section("Adding BFS Trees")
-            self.wait(1)
+            self.wait()
             bfs_graphs = create_bfs_graphs(bfs_edges, free_nodes, matched_nodes)
             # arrange and scale to fit on screen
-            bfs_graphs.arrange_in_grid(buff=0.3)
+            bfs_graphs.arrange_in_grid()
             # get the scale factor to fit the available width
             width_scale = (available_width - (2 * spacing)) / bfs_graphs.get_width()
             # get the scale factor to fit the available height
@@ -195,34 +215,31 @@ class BipartiteGraphAnimation(Scene):
                     scaled_stroke = e.get_stroke_width() * scale
                     e.set_stroke_width(scaled_stroke)
 
-            # thankfully VGroup preserves order
+            # animate unmatched node circles to the bfs graph
             for i, gr in enumerate(bfs_graphs):
                 root_key = free_nodes[i]
                 root = gr.vertices[root_key]
                 circle = free_n_highlight.get(root_key, None)
                 if circle:
-                    self.play(
-                        Create(gr),
-                        circle.animate.surround(root),
-                    )
-                    self.play(Indicate(root), FadeTransform(circle, root))
+                    self.play(Transform(circle, root))
+                    self.add_foreground_mobjects(circle)
+                    self.play(Create(gr))
+                    self.remove(circle)
             self.wait(1)
 
-            # set the edge to be removed to red then back to grey
+            # set the edges to be removed to red then back to grey
             if type(edge_remove) == tuple:
-                u = edge_remove[0]
-                v = edge_remove[1]
-                edges_to_remove = [G.edges[(u, v)]]
 
-                for gr in bfs_graphs:
-                    if (u, v) in gr.edges:
-                        edges_to_remove.append(gr.edges[(u, v)])
-                    if (v, u) in gr.edges:
-                        edges_to_remove.append(gr.edges[(v, u)])
+                edges_to_remove = [G.edges[edge_remove]]
+                edges_to_remove += get_edges_from_bfs_graphs(bfs_graphs, edge_remove)
 
-                self.play(*[e.animate.set_color(RED) for e in edges_to_remove], run_time=0.5)
+                self.play(
+                    *[e.animate.set_color(DELETING_COLOR) for e in edges_to_remove], run_time=0.5
+                )
                 self.wait(1)
-                self.play(*[e.animate.set_color(GRAY) for e in edges_to_remove], run_time=0.5)
+                self.play(
+                    *[e.animate.set_color(UNMATCHED_COLOR) for e in edges_to_remove], run_time=0.5
+                )
 
             self.next_section("Matching Edges")
 
@@ -230,35 +247,35 @@ class BipartiteGraphAnimation(Scene):
             matches = []
             while anim_steps[0].startswith("add match"):
                 # space separated list of tuples
-                matches.append(eval(anim_steps.pop(0).split(":")[1]))
+                original_pair = eval(anim_steps.pop(0).split(":")[1])
+                match = (
+                    get_node_name(original_pair[0], True),
+                    get_node_name(original_pair[1], False),
+                )
+                matches.append(match)
 
-            for match in matches:
-                u = get_node_name(match[0], True)
-                v = get_node_name(match[1], False)
-                edge = (u, v)
+            for edge in matches:
+                u, v = edge
                 edges_to_match = [G.edges[edge]]
-                for gr in bfs_graphs:
-                    if edge in gr.edges:
-                        edges_to_match.append(gr.edges[edge])
-                    if (v, u) in gr.edges:
-                        edges_to_match.append(gr.edges[(v, u)])
-                self.play(*[e.animate.set_color(GREEN) for e in edges_to_match], run_time=0.5)
-                self.play(*[Indicate(e) for e in edges_to_match], run_time=0.5)
+                edges_to_match += get_edges_from_bfs_graphs(bfs_graphs, edge)
+                self.play(
+                    *[Indicate(e, color=MATCHED_COLOR) for e in edges_to_match],
+                    *[e.animate.set_color(MATCHED_COLOR) for e in edges_to_match],
+                )
                 all_u = [g.vertices[u] for g in bfs_graphs if u in g.vertices.keys()]
                 all_v = [g.vertices[v] for g in bfs_graphs if v in g.vertices.keys()]
                 # remove any edge containing u or v
                 all_edges = []
-                for g in bfs_graphs:
-                    for e in g.edges:
-                        if u in e or v in e:
-                            all_edges.append(g.edges[e])
+                all_edges += get_edges_from_bfs_graphs(bfs_graphs, edge, require_both=False)
                 objects_to_remove = all_edges + all_u + all_v
+
+                # highlight the matched nodes
                 self.play(
-                    *[Circumscribe(n, Circle) for n in all_v + all_u],
-                    Circumscribe(G.vertices[u], Circle),
-                    Circumscribe(G.vertices[v], Circle),
-                    run_time=3,
+                    Indicate(G.vertices[u], color=DELETING_COLOR),
+                    Indicate(G.vertices[v], color=DELETING_COLOR),
                 )
+                # flash those nodes in all the bfs graphs
+                self.play(*[Indicate(n, color=DELETING_COLOR) for n in all_v + all_u], run_time=2)
 
                 # remove the vertices from the actual graphs
                 for g in bfs_graphs:
@@ -269,10 +286,12 @@ class BipartiteGraphAnimation(Scene):
                     if len(g.vertices) == 1:
                         objects_to_remove.append(g)
                         bfs_graphs.remove(g)
+                # fade out all the objects to remove
                 if len(objects_to_remove) > 0:
                     self.play(*[FadeOut(o) for o in objects_to_remove])
                     # remove the objects from the scene
                     self.remove(*objects_to_remove)
+
                 self.wait(1)
 
             if not anim_steps[0].startswith("bfs_edges"):
@@ -281,14 +300,40 @@ class BipartiteGraphAnimation(Scene):
                     self.remove(*bfs_graphs)
                 break
 
-        # add the bfs graph
-
-        # Hold the final state for a moment before closing
-        self.wait(1)
-
         # move the graph back to the center
         self.play(G.animate.move_to(ORIGIN))
-        self.wait(1)
 
-        # remove edges set to GRAY
-        self.play(*[FadeOut(e) for _, e in G.edges.items() if e.get_color() == GRAY])
+        # remove edges set to UNMATCHED_COLOR
+        self.play(*[FadeOut(e) for _, e in G.edges.items() if e.get_color() == UNMATCHED_COLOR])
+        self.remove(*[e for _, e in G.edges.items() if e.get_color() == UNMATCHED_COLOR])
+
+        self.wait(1)
+        self.next_section("Displaying final matchings")
+        # get all the edges that are matched
+        matched_edges = [e for e in G.edges if G.edges[e].get_color() == MATCHED_COLOR]
+        offset = G["v_0"].get_center() - G["u_0"].get_center()
+        remaining_spaces = [G[u] for u in G.vertices if u.startswith("u")]
+        unmoved_v = [G[v] for v in G.vertices if v.startswith("v")]
+        animations = []
+        for u, v in matched_edges:
+            animations.append(G[v].animate.move_to(G[u].get_center() + offset))
+            # updater to stick edges to nodes doesn't work, so do it manually
+            animations.append(
+                G.edges[(u, v)].animate.put_start_and_end_on(
+                    G[u].get_center(), G[u].get_center() + offset
+                )
+            )
+            remaining_spaces.remove(G[u])
+            unmoved_v.remove(G[v])
+
+        for i in range(len(remaining_spaces)):
+            animations.append(G[unmoved_v[i]].animate.move_to(G[remaining_spaces[i]].get_center()))
+            animations.append(
+                G.edges[
+                    (remaining_spaces[i].name, unmoved_v[i].name)
+                ].animate.put_start_and_end_on(
+                    G[remaining_spaces[i]].get_center(), G[remaining_spaces[i]].get_center()
+                )
+            )
+        self.play(*animations)
+        self.wait(5)
