@@ -1,9 +1,9 @@
 from manim import *
 from utils import load_file, matrix_to_edge_pairs
-
+import math
 import networkx as nx
 
-graph_name = "size4.graph"
+graph_name = "size15.graph"
 anim_step_file = graph_name + ".anim"
 
 NODE_RADIUS = 0.3
@@ -164,7 +164,7 @@ class BipartiteGraphAnimation(Scene):
         # scale graph to fit available height
         height_scale = (SCR_HEIGHT - (2 * spacing)) / G.get_height()
         G.scale(height_scale)
-        self.play(Create(G))
+        self.play(Create(G), runtime=5)
         self.wait()
         self.play(G.animate.to_edge(LEFT, buff=spacing))
         self.wait()
@@ -198,7 +198,6 @@ class BipartiteGraphAnimation(Scene):
             self.next_section("Adding BFS Trees")
             self.wait()
             bfs_graphs = create_bfs_graphs(bfs_edges, free_nodes, matched_nodes)
-            # arrange and scale to fit on screen
             bfs_graphs.arrange_in_grid()
             # get the scale factor to fit the available width
             width_scale = (available_width - (2 * spacing)) / bfs_graphs.get_width()
@@ -307,7 +306,6 @@ class BipartiteGraphAnimation(Scene):
         self.play(*[FadeOut(e) for _, e in G.edges.items() if e.get_color() == UNMATCHED_COLOR])
         self.remove(*[e for _, e in G.edges.items() if e.get_color() == UNMATCHED_COLOR])
 
-        self.wait(1)
         self.next_section("Displaying final matchings")
         # get all the edges that are matched
         matched_edges = [e for e in G.edges if G.edges[e].get_color() == MATCHED_COLOR]
@@ -323,17 +321,17 @@ class BipartiteGraphAnimation(Scene):
                     G[u].get_center(), G[u].get_center() + offset
                 )
             )
-            remaining_spaces.remove(G[u])
-            unmoved_v.remove(G[v])
+        #     remaining_spaces.remove(G[u])
+        #     unmoved_v.remove(G[v])
 
-        for i in range(len(remaining_spaces)):
-            animations.append(G[unmoved_v[i]].animate.move_to(G[remaining_spaces[i]].get_center()))
-            animations.append(
-                G.edges[
-                    (remaining_spaces[i].name, unmoved_v[i].name)
-                ].animate.put_start_and_end_on(
-                    G[remaining_spaces[i]].get_center(), G[remaining_spaces[i]].get_center()
-                )
-            )
+        # for i in range(len(remaining_spaces)):
+        #     animations.append(G[unmoved_v[i]].animate.move_to(G[remaining_spaces[i]].get_center()))
+        #     animations.append(
+        #         G.edges[
+        #             (remaining_spaces[i].name, unmoved_v[i].name)
+        #         ].animate.put_start_and_end_on(
+        #             G[remaining_spaces[i]].get_center(), G[remaining_spaces[i]].get_center()
+        #         )
+        #     )
         self.play(*animations)
         self.wait(5)
