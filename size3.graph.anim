@@ -1,0 +1,14 @@
+bfs_edges: [(0, 0), (0, 2), (1, 1), (1, 2), (2, 0), (2, 1)]
+matched nodes: []
+edge remove: []
+unmatched nodes: [0, 1, 2]
+add match: (0, 0)
+add match: (1, 1)
+bfs_edges: [(2, 0), (2, 1), (0, 0), (0, 2), (1, 1), (1, 2)]
+matched nodes: [(0, 0), (1, 1)]
+edge remove: (0, 0)
+unmatched nodes: [2]
+add match: (0, 2)
+add match: (2, 0)
+matched nodes: [(0, 2), (1, 1), (2, 0)]
+Size of maximum matching is 3

@@ -39,6 +39,24 @@ def matrix_to_adj_list(matrix: np.ndarray) -> dict:
     return adj_hash
 
 
+def matrix_to_edge_pairs(matrix: np.ndarray) -> list:
+    """
+    Convert a matrix of weights into a list of edge pairs.
+
+    Args:
+        matrix (np.ndarray): The matrix of weights.
+
+    Returns:
+        list: The list of edge pairs.
+    """
+    edge_pairs = []
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            if matrix[i, j] != 0:
+                edge_pairs.append((i, j))
+    return edge_pairs
+
+
 def parse_args():
     """
     Parse command line arguments.
