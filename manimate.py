@@ -3,7 +3,7 @@ from utils import load_file, matrix_to_edge_pairs
 import math
 import networkx as nx
 
-graph_name = "size15.graph"
+graph_name = "size4.graph"
 anim_step_file = graph_name + ".anim"
 
 NODE_RADIUS = 0.3
